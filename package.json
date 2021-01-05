@@ -5,7 +5,9 @@
     "dependencies": {
         "aws-appsync": "^4.0.1",
         "cross-fetch": "^3.0.6",
+        "crypto-js": "^4.0.0",
         "graphql-tag": "^2.11.0",
+        "jsonwebtoken": "^8.5.1",
         "serverless": "^1.60.4"
     },
     "scripts": {

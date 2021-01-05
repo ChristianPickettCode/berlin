@@ -4,6 +4,8 @@ const WebSocket = require('../common/websocketMessage');
 
 const AppSync = require('../common/AppSync');
 const gql = require('graphql-tag');
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto-js');
 
 const tableName = process.env.tableName;
 const apiTableName = process.env.apiTableName;
@@ -84,53 +86,85 @@ exports.handler = async event => {
             console.log("###### SESSION COUNT ########")
             console.log(sessionCount);
 
+            console.log("############# ---- VALIDATE ---- ################");
+            const valid = validate(apiRecord, body);
+
             console.log("############# ---- SEND ---- ################");
             console.log(apiRecord);
             console.log(requestRecord);
 
             if (requestRecord) {
+                if (valid) {
+                    const sc = sessionCount + 1;
 
-                const sc = sessionCount + 1;
-
-                // const updatedApiRecord = {
-                //     ...apiRecord, 
-                //     sessionCount: sc
-                // }
-
-                // console.log(updatedApiRecord);
-
-                console.log("############# ---- UPDATE ---- ################");
-                const mutation = gql(`
-                    mutation UpdateSessionCountCreateSession {
-                        updateApiKey(input: {id: "${body.appID}", sessionCount: ${sc}}) {
-                            appName
-                            id
-                            sessionCount
+                    console.log("############# ---- UPDATE ---- ################");
+                    const mutation = gql(`
+                        mutation UpdateSessionCountCreateSession {
+                            updateApiKey(input: {id: "${body.appID}", sessionCount: ${sc}}) {
+                                appName
+                                id
+                                sessionCount
+                            }
+                            createSession(input: {apiKeyID: "${body.appID}", id: "${connectionID}", type: "TRANSFER"}) {
+                                createdAt
+                                type
+                                id
+                                apiKeyID
+                            }
                         }
-                        createSession(input: {apiKeyID: "${body.appID}", id: "${connectionID}", type: "TRANSFER"}) {
-                            createdAt
-                            type
-                            id
-                            apiKeyID
+                    `);
+                    await AppSync.graphqlClient.mutate({ mutation }).then(res => console.log(res)).catch(err => console.log(err));
+                    
+                    console.log("############# ---- UPDATE DONE ---- ################");
+
+                    // await Dynamo.writeApi(updatedApiRecord, apiTableName).then(res => console.log(res)).catch(err => console.log(err));
+
+                    console.log("######## UPSss #######");
+
+                    await WebSocket.send({
+                        domainName,
+                        stage,
+                        connectionID : to,
+                        message: `{ "status": "send", "response": "FROM USER : ${connectionID}", "data": "${body.data}" }`,
+                    });
+
+                } else {
+
+                    const sc = sessionCount + 1;
+
+                    console.log("############# ---- UPDATE ---- ################");
+                    const mutation = gql(`
+                        mutation UpdateSessionCountCreateSession {
+                            updateApiKey(input: {id: "${body.appID}", sessionCount: ${sc}}) {
+                                appName
+                                id
+                                sessionCount
+                            }
+                            createSession(input: {apiKeyID: "${body.appID}", id: "${connectionID}", type: "NOT VALID"}) {
+                                createdAt
+                                type
+                                id
+                                apiKeyID
+                            }
                         }
-                    }
-                `);
-                await AppSync.graphqlClient.mutate({ mutation }).then(res => console.log(res)).catch(err => console.log(err));
-                
-                console.log("############# ---- UPDATE DONE ---- ################");
+                    `);
+                    await AppSync.graphqlClient.mutate({ mutation }).then(res => console.log(res)).catch(err => console.log(err));
+                    
+                    console.log("############# ---- UPDATE DONE ---- ################");
 
-                // await Dynamo.writeApi(updatedApiRecord, apiTableName).then(res => console.log(res)).catch(err => console.log(err));
+                    // await Dynamo.writeApi(updatedApiRecord, apiTableName).then(res => console.log(res)).catch(err => console.log(err));
 
-                console.log("######## UPSss #######");
+                    console.log("######## UPSss #######");
 
-                await WebSocket.send({
-                    domainName,
-                    stage,
-                    connectionID : to,
-                    message: `{ "status": "send", "response": "FROM USER : ${connectionID}", "data": "${body.data}" }`,
-                });
+                    await WebSocket.send({
+                        domainName,
+                        stage,
+                        connectionID : to,
+                        message: `{ "status": "notValid", "response": "FROM USER : ${connectionID}" }`,
+                    });
 
-                
+                }
+
             } else {
                 await WebSocket.send({
                     domainName,
@@ -148,3 +182,36 @@ exports.handler = async event => {
 
     return Responses._200({ message: 'got a message' });
 };
+
+function validate(apiRecord, body){
+    console.log("API RECORD", apiRecord);
+    console.log("SEND DATA", body.data);
+    const whitelist = apiRecord.whitelist;
+    let valid = false;
+    try {
+        console.log("#### - BODY :", body)
+        const d = crypto.AES.decrypt(body.data, body.to).toString(crypto.enc.Utf8)
+        const email = JSON.parse(d).email;
+        if (whitelist && whitelist.length > 0) {
+            whitelist.forEach(el => {
+                console.log(el);
+                console.log(email);
+    
+                if (email === el) {
+                    valid = true;
+                }
+                else if (email.split("@")[1] === el) {
+                    valid = true;
+                }
+            });
+        } else {
+            valid = true;
+        }
+    } catch (error) {
+        console.log("ERROR", error)
+    }
+    
+    console.log("##### - DDDATA --- #####")
+    console.log("VALID : ", valid);
+    return valid;
+}
