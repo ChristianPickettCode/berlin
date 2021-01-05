@@ -1,0 +1,14 @@
+{
+    "name": "berlin",
+    "version": "1.0.0",
+    "description": "",
+    "dependencies": {
+        "aws-appsync": "^4.0.1",
+        "cross-fetch": "^3.0.6",
+        "graphql-tag": "^2.11.0",
+        "serverless": "^1.60.4"
+    },
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    }
+}

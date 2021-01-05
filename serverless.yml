@@ -1,0 +1,57 @@
+org: atlis
+app: berlin
+service: berlin
+
+provider:
+    name: aws
+    runtime: nodejs12.x
+    profile: berlin
+    region: us-east-1
+    environment:
+        tableName: ${self:custom.tableName}
+        apiTableName: ${self:custom.apiTableName}
+    iamRoleStatements:
+        - Effect: Allow
+          Action:
+              - dynamodb:*
+          Resource: '*'
+
+custom:
+    tableName: BerlinWebsocketUsers
+    apiTableName: ApiKey-p3ko4vtbhva4hduhhjja23gs5u-dev
+
+functions:
+    websocket-connect:
+        handler: lambdas/websockets/connect.handler
+        events:
+            - websocket:
+                  route: $connect
+    websocket-disconnect:
+        handler: lambdas/websockets/disconnect.handler
+        events:
+            - websocket:
+                  route: $disconnect
+    websocket-default:
+        handler: lambdas/websockets/default.handler
+        events:
+            - websocket:
+                  route: $default
+    websocket-message:
+        handler: lambdas/websockets/message.handler
+        events:
+            - websocket:
+                  route: message
+
+resources:
+    Resources:
+        BerlinWebsocketUserTable:
+            Type: AWS::DynamoDB::Table
+            Properties:
+                TableName: ${self:custom.tableName}
+                AttributeDefinitions:
+                    - AttributeName: ID
+                      AttributeType: S
+                KeySchema:
+                    - AttributeName: ID
+                      KeyType: HASH
+                BillingMode: PAY_PER_REQUEST
